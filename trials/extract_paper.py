@@ -13,7 +13,7 @@ def extract_text_from_pdf(pdf_path):
     doc.close()
     return text
 
-pdf_path = 'A6-MON~1.pdf'
+pdf_path = 'papers/A6-MON~1.pdf'
 text = extract_text_from_pdf(pdf_path)
 
 print(text)
