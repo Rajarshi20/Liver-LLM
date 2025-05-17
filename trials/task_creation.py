@@ -18,16 +18,17 @@ def estimate_tokens(text):
 # Step 1: Load and index all paper files
 paper_data = []
 for filename in tqdm(sorted(os.listdir(input_dir))):
-    if filename.endswith(".json"):
+    if filename.endswith(".jsonl"):
         with open(os.path.join(input_dir, filename), "r") as f:
-            content = json.load(f)
-            text = content.get("text", "")
-            tokens = estimate_tokens(text)
-            paper_data.append({
-                "filename": filename,
-                "content": content,
-                "tokens": tokens
-            })
+            for line in f:
+                content = json.loads(line)
+                text = content.get("text", "")
+                tokens = estimate_tokens(text)
+                paper_data.append({
+                    "filename": filename,
+                    "content": content,
+                    "tokens": tokens
+                })
 
 # Step 2: Shuffle
 random.shuffle(paper_data)
