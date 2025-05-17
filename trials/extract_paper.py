@@ -3,12 +3,13 @@ import fitz  # PyMuPDF
 from transformers import AutoTokenizer
 from datasets import Dataset
 import json
+import re
 
-PDF_DIR = "path/to/your/pdf_folder"
-OUTPUT_DIR = "path/to/your/output_folder"
-BATCH_SIZE = 100  # adjust based on memory
+
+PDF_DIR = "papers/"
+OUTPUT_DIR = "extracted_chunked_text/"
+BATCH_SIZE = 1  # adjust based on memory
 MODEL_NAME = "TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T"
-
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
 # Extract text from PDF
@@ -35,8 +36,19 @@ def chunk_text(text, max_tokens=512):
         chunks.append(current_chunk.strip())
     return chunks
 
+def clean_text(text):
+    text = text.replace('\n', ' ').replace('\r', ' ')
+    text = re.sub(r'-\s+', '', text)  # Fix hyphenation
+    text = ' '.join(text.split())     # Remove extra spaces
+    text = re.sub(r'[^a-zA-Z0-9.,;:\-()%\s]', '', text)  # Remove unwanted chars
+    text = re.sub(r'\s+', ' ', text).strip()
+    text = re.split(r'(references|acknowledgements|conflicts of interest)', text, flags=re.IGNORECASE)[0]
+    
+    return text
+
 def process_pdf(pdf_path):
     text = extract_text_from_pdf(pdf_path)
+    text = clean_text(text)
     chunks = chunk_text(text)
     return [{"text": chunk} for chunk in chunks if len(chunk.split()) > 10]
 
@@ -51,26 +63,15 @@ def batch_process_pdfs(pdf_paths, output_file):
         for item in all_samples:
             f.write(json.dumps(item) + "\n")
 
-# Tokenize all chunks
-def tokenize_chunks(chunks):
-    tokenized = []
-    for chunk in chunks:
-        tokens = tokenizer(chunk, return_tensors='pt', truncation=True, max_length=512, padding='max_length')
-        tokenized.append(tokens)
-    return tokenized
-
 # Process PDFs in batches
-""" all_pdfs = [os.path.join(PDF_DIR, f) for f in os.listdir(PDF_DIR) if f.endswith(".pdf")]
+all_pdfs = [os.path.join(PDF_DIR, f) for f in os.listdir(PDF_DIR)]
 for i in range(0, len(all_pdfs), BATCH_SIZE):
     batch = all_pdfs[i:i+BATCH_SIZE]
     batch_file = os.path.join(OUTPUT_DIR, f"batch_{i//BATCH_SIZE}.jsonl")
     batch_process_pdfs(batch, batch_file)
-    print(f"Saved {batch_file}") """
+    print(f"Saved {batch_file}")
 
-pdf_path = ['papers/A6-MON~1.pdf']
+""" pdf_path = ['papers/A6-MON~1.pdf']
 text = batch_process_pdfs(pdf_path, "output.json")
-tokenized_chunks = tokenize_chunks(text)
 
-# Print the first tokenized chunk
-print(tokenized_chunks[0])
-print(text)
+print(text) """
