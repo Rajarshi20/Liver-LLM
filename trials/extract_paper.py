@@ -50,13 +50,21 @@ def process_pdf(pdf_path):
     text = extract_text_from_pdf(pdf_path)
     text = clean_text(text)
     chunks = chunk_text(text)
-    return [{"text": chunk} for chunk in chunks if len(chunk.split()) > 10]
+    json_obj = {
+        'paper_name': pdf_path,
+        'chunks':[]
+    }
+    for chunk in chunks:
+        if len(chunk.split()) > 10:
+            json_obj['chunks'].append({"text": chunk})
+
+    return json_obj
 
 def batch_process_pdfs(pdf_paths, output_file):
     all_samples = []
     for pdf_path in pdf_paths:
         try:
-            all_samples.extend(process_pdf(pdf_path))
+            all_samples.append(process_pdf(pdf_path))
         except Exception as e:
             print(f"Error processing {pdf_path}: {e}")
     with open(output_file, "w") as f:
