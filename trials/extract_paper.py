@@ -50,8 +50,9 @@ def process_pdf(pdf_path):
     text = extract_text_from_pdf(pdf_path)
     text = clean_text(text)
     chunks = chunk_text(text)
+    file_name = pdf_path.split('/')[1].rsplit('.', 1)[0]
     json_obj = {
-        'paper_name': pdf_path,
+        'paper_name': file_name,
         'chunks':[]
     }
     for chunk in chunks:
