@@ -1,4 +1,6 @@
 venv
 _pycache_
 papers
-hop2_hop3_csv
+source_csv
+paper_extraction_results
+cleaned_csv
