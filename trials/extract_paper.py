@@ -76,7 +76,7 @@ def batch_process_pdfs(pdf_paths, output_file):
 all_pdfs = [os.path.join(PDF_DIR, f) for f in os.listdir(PDF_DIR)]
 for i in range(0, len(all_pdfs), BATCH_SIZE):
     batch = all_pdfs[i:i+BATCH_SIZE]
-    batch_file = os.path.join(OUTPUT_DIR, f"batch_{i//BATCH_SIZE}.jsonl")
+    batch_file = os.path.join(OUTPUT_DIR, f"batch_{i//BATCH_SIZE}.json")
     batch_process_pdfs(batch, batch_file)
     print(f"Saved {batch_file}")
 
