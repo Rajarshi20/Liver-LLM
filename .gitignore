@@ -4,3 +4,5 @@ papers
 source_csv
 paper_extraction_results
 cleaned_csv
+extracted_chunked_text
+tasks
