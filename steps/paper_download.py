@@ -2,6 +2,7 @@ import requests
 import os
 import pandas as pd
 import math
+from pandas.errors import EmptyDataError
 
 class DownloadPapers:
     INPUT_DIR = 'source_csv'
@@ -31,7 +32,7 @@ class DownloadPapers:
             df = df.dropna(subset=['DOI'])
             df = df.drop_duplicates(subset=['DOI'])
 
-            # Splitting the big CDV into smaller chunks
+            # Splitting the big CSV into smaller chunks
             chunk_size = 5000
             num_chunks = math.ceil(len(df) / chunk_size)
             for i in range(num_chunks):
@@ -84,14 +85,20 @@ class DownloadPapers:
     def download_paper_by_doi(self, doi, title, csv_file):
         # Downloading the papers from each chunk CSV file into a separate directory
         output_path = os.path.join(self.PAPERS_OUTPUT_DIR, csv_file)
-        
+        # print(csv_file)
+
         # Creating directory if needed
         os.makedirs(output_path, exist_ok=True)
         
         failed_downloads_path = f'{self.LOGS_OUTPUT_DIR}/log_{csv_file}.csv'
+        failed_downloads = []
 
-        if os.path.exists(failed_downloads_path):
-            failed_downloads = pd.read_csv(failed_downloads_path).to_dict('records')
+        if os.path.exists(failed_downloads_path) and os.path.getsize(failed_downloads_path) > 0:
+            try:
+                failed_downloads = pd.read_csv(failed_downloads_path).to_dict('records')
+            except EmptyDataError:
+                print(f"Warning: {failed_downloads_path} is empty or improperly formatted. Starting fresh log:")
+                failed_downloads = []
         else:
             failed_downloads = []
         
@@ -123,20 +130,18 @@ class DownloadPapers:
             })
         
         pd.DataFrame(failed_downloads).to_csv(failed_downloads_path, index=False)
-
-if __name__ == '__main__':
-    papers = DownloadPapers()
-
-    papers.create_directory()
     
-    papers.read_and_clean_csvs()
-    i = 1
-    for file in os.listdir(papers.CLEANED_CSV_DIR):
-        df = pd.read_csv(f'{papers.CLEANED_CSV_DIR}/{file}')
-        for id, row in df.iterrows():
-            doi = row['DOI']
-            title = row['Title']
-            papers.download_paper_by_doi(doi=doi, title=title, csv_file=file.split('.')[0])
-        
-        if i == 1:
-            break
+    def main(self):
+        # Step 1: Ensuring all the directories exisit, if not then we create them
+        self.create_directory()
+
+        # Step 2: We parse the source CSVs of hop2 and hop3, clean and split them into manageable chunks
+        self.read_and_clean_csvs()
+
+        # Step 3: We parse every cleaned CSV and download the paper using it's DOI
+        for file in os.listdir(self.CLEANED_CSV_DIR):
+            df = pd.read_csv(f'{self.CLEANED_CSV_DIR}/{file}')
+            for id, row in df.iterrows():
+                doi = row['DOI']
+                title = row['Title']
+                self.download_paper_by_doi(doi=doi, title=title, csv_file=file.split('.')[0])

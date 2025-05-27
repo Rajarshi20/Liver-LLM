@@ -1,0 +1,23 @@
+import os
+import pandas as pd
+from steps import DownloadPapers, ExtractPaper, TaskCreation, PretrainLLM
+
+def main():
+    # Step 1 : Download the papers
+    # papers = DownloadPapers()
+    # papers.main()
+    
+    # Step 2: Extract the paper content
+    # extract_papers = ExtractPaper()
+    # extract_papers.main()
+
+    # Step 3: Task Creation
+    # tasks = TaskCreation()
+    # tasks.main()
+
+    # # Step 4: Pretrain the model
+    train = PretrainLLM()
+    train.main()
+
+if __name__ == '__main__':
+    main()
