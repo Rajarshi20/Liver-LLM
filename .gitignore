@@ -6,3 +6,4 @@ paper_extraction_results
 cleaned_csv
 extracted_chunked_text
 tasks
+.env
