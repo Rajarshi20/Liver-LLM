@@ -15,9 +15,12 @@ def main():
     # tasks = TaskCreation()
     # tasks.main()
 
-    # # Step 4: Pretrain the model
-    train = PretrainLLM()
-    train.main()
+    # Step 4: Pretrain the model
+    trainer = PretrainLLM(
+        data_dir="tasks",
+        output_dir="llama4_medical_finetuned"
+    )
+    trainer.train()
 
 if __name__ == '__main__':
     main()
