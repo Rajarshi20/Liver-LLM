@@ -12,8 +12,8 @@ def main():
     # extract_papers.main()
 
     # Step 3: Task Creation
-    # tasks = TaskCreation()
-    # tasks.main()
+    tasks = TaskCreation()
+    tasks.main()
 
     # Step 4: Pretrain the LLAMA 4 Scout model
     trainer = PretrainLLM(
