@@ -1,12 +1,12 @@
 import os
 import fitz  # PyMuPDF
 from transformers import AutoTokenizer
-from datasets import Dataset
 import json
 import re
+import logging
 
 class ExtractPaper:
-    PDF_DIR = "papers/sample"
+    PDF_DIR = "papers/"
     OUTPUT_DIR = "extracted_chunked_text/"
     BATCH_SIZE = 1  # adjust based on memory
     MODEL_NAME = "TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T"
@@ -14,12 +14,26 @@ class ExtractPaper:
 
     # Extract text from PDF
     def extract_text_from_pdf(self, pdf_path):
-        doc = fitz.open(pdf_path)
-        text = ""
-        for page_num in range(len(doc)):
-            page = doc.load_page(page_num)
-            text += page.get_text()
-        doc.close()
+        text= ""
+        try:
+            doc = fitz.open(pdf_path)
+        except Exception as e:
+            logging.warning(f"Failed to open PDF: {pdf_path} | Error: {e}")
+            return ""  # Skip file if cannot open
+
+        try:
+            for page_num in range(len(doc)):
+                try:
+                    page = doc.load_page(page_num)
+                    page_text = page.get_text()
+                    text += page_text
+                except Exception as e:
+                    logging.warning(f"Failed to extract text from page {page_num} in {pdf_path} | Error: {e}")
+        finally:
+            doc.close()
+
+        if not text.strip():
+            logging.info(f"No text found in PDF: {pdf_path}")
         return text
 
     def chunk_text(self, text, max_tokens=512):
