@@ -1,6 +1,6 @@
 import os
 import pandas as pd
-from steps import DownloadPapers, ExtractPaper, TaskCreation, PretrainLLM
+from steps import DownloadPapers, ExtractPaper, TaskCreation, PretrainLLM, PretrainDeepseekLLM
 
 def main():
     # Step 1 : Download the papers
@@ -15,12 +15,20 @@ def main():
     # tasks = TaskCreation()
     # tasks.main()
 
-    # Step 4: Pretrain the model
+    # Step 4: Pretrain the LLAMA 4 Scout model
     trainer = PretrainLLM(
         data_dir="tasks",
         output_dir="llama4_medical_finetuned"
     )
     trainer.train()
+
+    # Step 5: Pretrain the Deepseek R1 model
+    deepseek = PretrainDeepseekLLM(
+        model_id="deepseek-ai/deepseek-llm-r1",
+        data_dir="tasks",
+        output_dir="deepseek-liver-llm"
+    )
+    deepseek.train()
 
 if __name__ == '__main__':
     main()
