@@ -6,7 +6,7 @@ from tqdm import tqdm
 class TaskCreation:
     INPUT_DIR = "extracted_chunked_text/"
     OUTPUT_DIR = "tasks/"
-    MAY_TOKENS_PER_TASK = 15000  # You can try increasing this to 12000–16000 for testing
+    MAY_TOKENS_PER_TASK = 8192  # You can try increasing this to 12000–16000 for testing
 
     paper_data = []
 
