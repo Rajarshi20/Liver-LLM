@@ -15,6 +15,7 @@ from transformers import (
     DataCollatorForLanguageModeling
 )
 from datasets import Dataset
+from datasets import concatenate_datasets
 from peft import LoraConfig, get_peft_model
 from huggingface_hub import login
 
@@ -93,48 +94,67 @@ class PretrainLLM:
 
 
     def _load_and_prepare_dataset(self) -> Dataset:
-    
-      all_files = list(self.data_dir.glob("*.json"))
-      datasets_list = []
+        """
+        Efficiently load and process the dataset by:
+        1. Processing one JSON file at a time.
+        2. Converting each JSON file to an Arrow dataset.
+        3. Tokenizing each dataset individually.
+        4. Saving each tokenized dataset to disk.
+        5. Loading all tokenized datasets using memory-mapped files and concatenating them.
+        """
+        all_files = list(self.data_dir.glob("*.json"))
+        processed_datasets = []
 
-      for file_path in all_files:
-          with open(file_path, "r", encoding="utf-8") as f:
-              try:
-                  data = json.load(f)
-                  for doc in data:
-                      for chunk in doc.get("chunks", []):
-                          text = chunk.get("text", "")
-                          if text.strip():
-                              datasets_list.append({"text": text})
-              except json.JSONDecodeError:
-                  print(f"❌ Skipping corrupt file: {file_path}")
-                  continue
-  
-      # Save memory by mapping with memory-efficient loading
-      raw_dataset = Dataset.from_list(datasets_list)
-  
-      # Optional: Save and reload with mmap to avoid keeping in memory
-      raw_dataset.save_to_disk("raw_dataset.arrow")
-      raw_dataset = Dataset.load_from_disk("raw_dataset.arrow")
-  
-      # Tokenize with minimal memory usage
-      tokenized_dataset = raw_dataset.map(
-          self._tokenize_function,
-          batched=True,
-          remove_columns=["text"],
-          num_proc=1  # reduce from 4 to 1 to lower RAM usage
-      )
-  
-      # Group texts for training blocks
-      lm_dataset = tokenized_dataset.map(
-          self._group_texts,
-          batched=True,
-          num_proc=1  # reduce to avoid overloading CPU RAM
-      )
-      print("Load and prepared dataset executed")
-  
-      return lm_dataset
+        for idx, file_path in enumerate(all_files):
+            with open(file_path, "r", encoding="utf-8") as f:
+                try:
+                    data = json.load(f)
+                    datasets_list = []
+                    for doc in data:
+                        for chunk in doc.get("chunks", []):
+                            text = chunk.get("text", "")
+                            if text.strip():
+                                datasets_list.append({"text": text})
+                except json.JSONDecodeError:
+                    print(f"❌ Skipping corrupt file: {file_path}")
+                    continue
 
+            if not datasets_list:
+                continue
+
+            # Convert to a dataset
+            raw_dataset = Dataset.from_list(datasets_list)
+
+            # Tokenize in batches, but file by file
+            tokenized_dataset = raw_dataset.map(
+                self._tokenize_function,
+                batched=True,
+                remove_columns=["text"],
+                num_proc=1,  # keep low to reduce memory usage
+            )
+
+            # Group text sequences for training
+            lm_dataset = tokenized_dataset.map(
+                self._group_texts,
+                batched=True,
+                num_proc=1,
+            )
+
+            # Save tokenized chunk to disk
+            chunk_save_path = f"tokenized_chunk_{idx}.arrow"
+            lm_dataset.save_to_disk(chunk_save_path)
+            processed_datasets.append(chunk_save_path)
+            print(f"✅ Processed and saved {file_path} as {chunk_save_path}")
+
+        if not processed_datasets:
+            raise RuntimeError("❌ No valid datasets were created from the JSON files.")
+
+        # Load all tokenized chunks and concatenate them using memory-mapping
+        all_tokenized_datasets = [Dataset.load_from_disk(path) for path in processed_datasets]
+        combined_dataset = concatenate_datasets(all_tokenized_datasets)
+        print("✅ All tokenized datasets loaded and concatenated.")
+
+        return combined_dataset
 
     def _tokenize_function(self, examples: Dict[str, List[str]]) -> Dict[str, List[int]]:
         print("Tokenization done")
@@ -182,6 +202,7 @@ class PretrainLLM:
             tokenizer=self.tokenizer,
             data_collator=self.data_collator,
         )
+        print('Starting training...')
         trainer.train()
         trainer.save_model(str(self.output_dir / "final_model"))
         self.tokenizer.save_pretrained(str(self.output_dir / "final_model"))
