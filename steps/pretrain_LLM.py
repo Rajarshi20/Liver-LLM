@@ -2,6 +2,7 @@ import os
 import json
 from pathlib import Path
 from typing import List, Dict
+from datasets import Dataset
 from dotenv import load_dotenv
 
 import torch
@@ -27,8 +28,8 @@ class PretrainLLM:
         model_id: str = "meta-llama/Llama-4-Scout-17B-16E-Instruct",
         data_dir: str = "data",
         output_dir: str = "llama4-medical-finetuned",
-        block_size: int = 8192,
-        batch_size: int = 8,
+        block_size: int = 2048,
+        batch_size: int = 2,
         gradient_accumulation_steps: int = 8,
         num_train_epochs: int = 1,
         save_steps: int = 1000,
@@ -37,6 +38,7 @@ class PretrainLLM:
         self.model_id = model_id
         self.data_dir = Path(data_dir)
         self.output_dir = Path(output_dir)
+        os.makedirs(output_dir, exist_ok=True)
         self.block_size = block_size
         self.batch_size = batch_size
         self.gradient_accumulation_steps = gradient_accumulation_steps
@@ -54,68 +56,89 @@ class PretrainLLM:
         self.training_args = self._get_training_arguments()
 
     def _load_model(self):
-        if self.device == "cuda":
-            print("✅ CUDA available: Using 4-bit quantization with bitsandbytes.")
-            bnb_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_use_double_quant=False,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=torch.bfloat16,
-            )
-            model = AutoModelForCausalLM.from_pretrained(
-                self.model_id,
-                quantization_config=bnb_config,
-                device_map="auto",
-                trust_remote_code=True,
-            )
-        else:
-            print("⚠️ CUDA not available: Loading model in float32 on CPU.")
-            model = AutoModelForCausalLM.from_pretrained(
-                self.model_id,
-                device_map=None,
-                torch_dtype=torch.float32,
-                trust_remote_code=True,
-            )
-            model.to(self.device)
-
-        lora_config = LoraConfig(
-            r=64,
-            lora_alpha=16,
-            target_modules=["q_proj", "v_proj"],
-            lora_dropout=0.1,
-            bias="none",
-            task_type="CAUSAL_LM",
+      if self.device == "cuda":
+        print("✅ CUDA available: Using 4-bit quantization with bitsandbytes.")
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_use_double_quant=False,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.bfloat16,
         )
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_id,
+            quantization_config=bnb_config,
+            device_map="auto",
+            trust_remote_code=True,
+        )
+      else:
+        raise RuntimeError("❌ Quantized models must be loaded on a CUDA device.")
 
-        model = get_peft_model(model, lora_config)
-        model.config.use_cache = False
-        model.config.pretraining_tp = 1
+      # Enable gradient checkpointing for memory efficiency
+      model.gradient_checkpointing_enable()
+      model.config.use_cache = False
+      model.config.pretraining_tp = 1
+  
+      # Apply LoRA
+      lora_config = LoraConfig(
+          r=64,
+          lora_alpha=16,
+          target_modules=["q_proj", "v_proj"],
+          lora_dropout=0.1,
+          bias="none",
+          task_type="CAUSAL_LM",
+      )
+      model = get_peft_model(model, lora_config)
+      print("Model loaded")
+      return model
 
-        return model
 
     def _load_and_prepare_dataset(self) -> Dataset:
-        all_files = list(self.data_dir.glob("*.json"))
-        datasets_list = []
+    
+      all_files = list(self.data_dir.glob("*.json"))
+      datasets_list = []
 
-        for file_path in all_files:
-            with open(file_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                for doc in data:
-                    for chunk in doc.get("chunks", []):
-                        text = chunk.get("text", "")
-                        if text.strip():
-                            datasets_list.append({"text": text})
+      for file_path in all_files:
+          with open(file_path, "r", encoding="utf-8") as f:
+              try:
+                  data = json.load(f)
+                  for doc in data:
+                      for chunk in doc.get("chunks", []):
+                          text = chunk.get("text", "")
+                          if text.strip():
+                              datasets_list.append({"text": text})
+              except json.JSONDecodeError:
+                  print(f"❌ Skipping corrupt file: {file_path}")
+                  continue
+  
+      # Save memory by mapping with memory-efficient loading
+      raw_dataset = Dataset.from_list(datasets_list)
+  
+      # Optional: Save and reload with mmap to avoid keeping in memory
+      raw_dataset.save_to_disk("raw_dataset.arrow")
+      raw_dataset = Dataset.load_from_disk("raw_dataset.arrow")
+  
+      # Tokenize with minimal memory usage
+      tokenized_dataset = raw_dataset.map(
+          self._tokenize_function,
+          batched=True,
+          remove_columns=["text"],
+          num_proc=1  # reduce from 4 to 1 to lower RAM usage
+      )
+  
+      # Group texts for training blocks
+      lm_dataset = tokenized_dataset.map(
+          self._group_texts,
+          batched=True,
+          num_proc=1  # reduce to avoid overloading CPU RAM
+      )
+      print("Load and prepared dataset executed")
+  
+      return lm_dataset
 
-        dataset = Dataset.from_list(datasets_list)
-        tokenized_dataset = dataset.map(
-            self._tokenize_function, batched=True, remove_columns=["text"]
-        )
-        lm_dataset = tokenized_dataset.map(self._group_texts, batched=True)
-
-        return lm_dataset
 
     def _tokenize_function(self, examples: Dict[str, List[str]]) -> Dict[str, List[int]]:
-        return self.tokenizer(examples["text"], return_special_tokens_mask=True)
+        print("Tokenization done")
+        return self.tokenizer(examples["text"], return_special_tokens_mask=True, truncation=True, max_length=4096)
 
     def _group_texts(self, examples: Dict[str, List[int]]) -> Dict[str, List[List[int]]]:
         concatenated = {k: sum(examples[k], []) for k in examples.keys()}
@@ -125,6 +148,7 @@ class PretrainLLM:
             for k, t in concatenated.items()
         }
         result["labels"] = result["input_ids"].copy()
+        print("Inside group text completed")
         return result
 
     def _get_training_arguments(self) -> TrainingArguments:
@@ -139,9 +163,13 @@ class PretrainLLM:
             save_total_limit=2,
             num_train_epochs=self.num_train_epochs,
             logging_steps=self.logging_steps,
-            fp16=self.device == "cuda",
+            fp16=False,
             report_to="none",
             remove_unused_columns=False,
+            gradient_checkpointing=True,
+            bf16=True,  # If supported on H100
+            torch_compile=False,  # Optional for performance
+
         )
 
     def train(self):
