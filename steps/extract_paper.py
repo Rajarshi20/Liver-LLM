@@ -9,7 +9,7 @@ class ExtractPaper:
     PDF_DIR = "papers/"
     OUTPUT_DIR = "extracted_chunked_text/"
     BATCH_SIZE = 1  # adjust based on memory
-    MODEL_NAME = "TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T"
+    MODEL_NAME = "meta-llama/Llama-4-Scout-17B-16E-Instruct"
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
     # Extract text from PDF
