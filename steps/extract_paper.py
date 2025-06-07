@@ -4,10 +4,9 @@ from transformers import AutoTokenizer
 import json
 import re
 import logging
+from config import ExtractPaper_OUTPUT_DIR, ExtractPaper_PDF_DIR
 
 class ExtractPaper:
-    PDF_DIR = "papers/"
-    OUTPUT_DIR = "extracted_chunked_text/"
     BATCH_SIZE = 1  # adjust based on memory
     MODEL_NAME = "meta-llama/Llama-4-Scout-17B-16E-Instruct"
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
@@ -94,12 +93,12 @@ class ExtractPaper:
     def main(self):
         # Processing PDFs in batches
 
-        all_pdfs = [os.path.join(self.PDF_DIR, f) for f in os.listdir(self.PDF_DIR)]
+        all_pdfs = [os.path.join(ExtractPaper_PDF_DIR, f) for f in os.listdir(ExtractPaper_PDF_DIR)]
         for i in range(0, len(all_pdfs), self.BATCH_SIZE):
             batch = all_pdfs[i : i+self.BATCH_SIZE]
 
-            os.makedirs(self.OUTPUT_DIR, exist_ok=True)
-            batch_file = os.path.join(self.OUTPUT_DIR, f"batch_{i//self.BATCH_SIZE}.json")
+            os.makedirs(ExtractPaper_OUTPUT_DIR, exist_ok=True)
+            batch_file = os.path.join(ExtractPaper_OUTPUT_DIR, f"batch_{i//self.BATCH_SIZE}.json")
             
             self.batch_process_pdfs(pdf_paths=batch, output_file=batch_file)
             print(f"Saved {batch_file}")

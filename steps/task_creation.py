@@ -2,10 +2,9 @@ import os
 import json
 import random
 from tqdm import tqdm
+from config import Task_INPUT_DIR, Task_OUTPUT_DIR
 
 class TaskCreation:
-    INPUT_DIR = "extracted_chunked_text/"
-    OUTPUT_DIR = "tasks/"
     MAY_TOKENS_PER_TASK = 8192  # You can try increasing this to 12000–16000 for testing
 
     paper_data = []
@@ -17,9 +16,9 @@ class TaskCreation:
 
     def load_and_index_papers(self):
         print("🔄 Loading papers...")
-        for filename in tqdm(sorted(os.listdir(self.INPUT_DIR))):
+        for filename in tqdm(sorted(os.listdir(Task_INPUT_DIR))):
             if filename.endswith(".json"):
-                with open(os.path.join(self.INPUT_DIR, filename), "r") as f:
+                with open(os.path.join(Task_INPUT_DIR, filename), "r") as f:
                     content = json.load(f)
                     chunks = content.get("chunks", [])
                     full_text = "\n".join(chunk.get("text", "") for chunk in chunks)
@@ -40,7 +39,7 @@ class TaskCreation:
             paper_tokens = paper["tokens"]
             if current_tokens + paper_tokens > self.MAY_TOKENS_PER_TASK and current_task:
                 print(f"✅ Writing task_{task_id:05d}.json with {len(current_task)} papers, total tokens: {current_tokens}")
-                with open(os.path.join(self.OUTPUT_DIR, f"task_{task_id:05d}.json"), "w") as f:
+                with open(os.path.join(Task_OUTPUT_DIR, f"task_{task_id:05d}.json"), "w") as f:
                     json.dump(current_task, f, indent=2)
                 task_id += 1
                 current_task = []
@@ -52,15 +51,15 @@ class TaskCreation:
         # Final leftover task
         if current_task:
             print(f"Writing task_{task_id:05d}.json with {len(current_task)} papers, total tokens: {current_tokens}")
-            with open(os.path.join(self.OUTPUT_DIR, f"task_{task_id:05d}.json"), "w") as f:
+            with open(os.path.join(Task_OUTPUT_DIR, f"task_{task_id:05d}.json"), "w") as f:
                 json.dump(current_task, f, indent=2)
 
-        print(f"\nDone! Created {task_id} task files in: {self.OUTPUT_DIR}")
+        print(f"\nDone! Created {task_id} task files in: {Task_OUTPUT_DIR}")
 
     def main(self):
         # Step 0: Ensuring all directories are created
-        os.makedirs(self.INPUT_DIR, exist_ok=True)
-        os.makedirs(self.OUTPUT_DIR, exist_ok=True)
+        os.makedirs(Task_INPUT_DIR, exist_ok=True)
+        os.makedirs(Task_OUTPUT_DIR, exist_ok=True)
 
         # Step 1: Load and index all paper files
         self.load_and_index_papers()
