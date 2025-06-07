@@ -9,6 +9,7 @@ charset-normalizer
 colorama
 datasets
 dill
+evaluate
 faiss-cpu
 filelock
 frozenlist
@@ -22,6 +23,7 @@ mpmath
 multidict
 multiprocess
 networkx
+nltk
 numpy
 opencv-python
 packaging
