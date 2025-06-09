@@ -17,7 +17,7 @@ from transformers import (
 from datasets import Dataset
 from peft import LoraConfig, get_peft_model
 from huggingface_hub import login
-from config import pretrain_model_id, pretrain_data_dir, pretrain_output_dir
+from config import pretrain_model_id, pretrain_data_dir, pretrain_output_dir, saved_liver_llm_model
 
 load_dotenv()
 
@@ -182,5 +182,5 @@ class PretrainLLM:
             data_collator=self.data_collator,
         )
         trainer.train()
-        trainer.save_model(str(pretrain_output_dir / "final_model"))
-        self.tokenizer.save_pretrained(str(pretrain_output_dir / "final_model"))
+        trainer.save_model(str(saved_liver_llm_model))
+        self.tokenizer.save_pretrained(str(saved_liver_llm_model))

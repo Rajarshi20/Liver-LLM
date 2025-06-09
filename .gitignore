@@ -7,3 +7,4 @@ cleaned_csv
 extracted_chunked_text
 tasks
 .env
+qa_dataset
