@@ -17,7 +17,6 @@ from transformers import (
 from datasets import Dataset
 from peft import LoraConfig, get_peft_model
 from huggingface_hub import login
-from config import pretrain_model_id, pretrain_data_dir, pretrain_output_dir
 
 load_dotenv()
 
@@ -26,6 +25,9 @@ class PretrainLLM:
 
     def __init__(
         self,
+        model_id: str = "meta-llama/Meta-Llama-3-8B-Instruct",
+        data_dir: str = "data",
+        output_dir: str = "llama4-medical-finetuned",
         block_size: int = 2048,
         batch_size: int = 2,
         gradient_accumulation_steps: int = 8,
@@ -33,7 +35,10 @@ class PretrainLLM:
         save_steps: int = 1000,
         logging_steps: int = 100,
     ):
-        os.makedirs(pretrain_output_dir, exist_ok=True)
+        self.model_id = model_id
+        self.data_dir = Path(data_dir)
+        self.output_dir = Path(output_dir)
+        os.makedirs(output_dir, exist_ok=True)
         self.block_size = block_size
         self.batch_size = batch_size
         self.gradient_accumulation_steps = gradient_accumulation_steps
@@ -63,7 +68,7 @@ class PretrainLLM:
         )
         device_id = torch.cuda.current_device()
         model = AutoModelForCausalLM.from_pretrained(
-            pretrain_model_id,
+            self.model_id,
             quantization_config=bnb_config,
             device_map={"": device_id},
             trust_remote_code=True,
@@ -93,7 +98,7 @@ class PretrainLLM:
 
     def _load_and_prepare_dataset(self) -> Dataset:
     
-      all_files = list(pretrain_data_dir.glob("*.json"))
+      all_files = list(self.data_dir.glob("*.json"))
       datasets_list = []
 
       for file_path in all_files:
@@ -152,7 +157,7 @@ class PretrainLLM:
 
     def _get_training_arguments(self) -> TrainingArguments:
         return TrainingArguments(
-            output_dir=str(pretrain_output_dir),
+            output_dir=str(self.output_dir),
             overwrite_output_dir=True,
             per_device_train_batch_size=self.batch_size,
             gradient_accumulation_steps=self.gradient_accumulation_steps,
@@ -182,5 +187,5 @@ class PretrainLLM:
             data_collator=self.data_collator,
         )
         trainer.train()
-        trainer.save_model(str(pretrain_output_dir / "final_model"))
-        self.tokenizer.save_pretrained(str(pretrain_output_dir / "final_model"))
+        trainer.save_model(str(self.output_dir / "final_model"))
+        self.tokenizer.save_pretrained(str(self.output_dir / "final_model"))
