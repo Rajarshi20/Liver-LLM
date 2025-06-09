@@ -40,6 +40,7 @@ pytz
 PyYAML
 regex
 requests
+rouge_score absl-py
 safetensors
 scikit-learn
 scipy
