@@ -1,6 +1,6 @@
 import os
 import pandas as pd
-from steps import DownloadPapers, ExtractPaper, TaskCreation, PretrainLLM, PretrainDeepseekLLM, ModelEvaluation
+from steps import DownloadPapers, ExtractPaper, TaskCreation, PretrainLLM, PretrainDeepseekLLM, ModelEvaluation, FineTunedModelEvaluation
 
 def main():
     # Step 1 : Download the papers
@@ -30,8 +30,11 @@ def main():
     )
     deepseek.train()
  """
-    evaluator = ModelEvaluation()
-    evaluator.main()
+    """ evaluator = ModelEvaluation()
+    evaluator.main() """
+
+    fteval = FineTunedModelEvaluation()
+    fteval.main()
 
 if __name__ == '__main__':
     main()

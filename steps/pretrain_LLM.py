@@ -28,7 +28,7 @@ class PretrainLLM:
         self,
         model_id: str = "meta-llama/Meta-Llama-3-8B-Instruct",
         data_dir: str = "data",
-        output_dir: str = "llama4-medical-finetuned",
+        output_dir: str = "llama3-medical-finetuned",
         block_size: int = 2048,
         batch_size: int = 2,
         gradient_accumulation_steps: int = 8,

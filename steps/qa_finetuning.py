@@ -1,9 +1,12 @@
 import json
 import os
-from config import saved_liver_llm_model, saved_liver_llm_qa_model
+import re
+from config import saved_liver_llm_model, saved_liver_llm_qa_model, LORA_MODEL_PATH, BASE_MODEL_PATH
 import json
 from pathlib import Path
 from tqdm import tqdm
+from peft import PeftModel
+from trl import SFTTrainer, setup_chat_format
 
 from transformers import (
     AutoTokenizer,
@@ -26,6 +29,9 @@ class QA_Finetuning:
             processed_entry["type"] = "MCQ"
             processed_entry["options"] = entry.get("options", [])
             processed_entry["answer"] = entry.get("cop", "").strip()
+            exp = entry.get("exp", "").strip()
+            exp = re.sub(r'[^\x00-\x7F]+', '', exp)
+            processed_entry["explanation"] = exp.encode('utf-8').decode('unicode_escape')
         else:
             processed_entry["type"] = "MOA"
             processed_entry["answer"] = entry.get("answer", "").strip()
@@ -63,6 +69,7 @@ class QA_Finetuning:
         qa_type = qa.get("type", "MOA").strip().upper()
         
         if qa_type == "MCQ":
+            explanation = qa.get("explanation", "")
             options = qa.get("options", {})
             # ensure consistent order: a, b, c, d
             options_str = "\n".join(
@@ -70,9 +77,10 @@ class QA_Finetuning:
                 for idx, letter in enumerate(['a', 'b', 'c', 'd'])]
             )
             prompt = (
-                f"<|question|>: {question}\n"
+                f"<|question|> : {question}\n"
                 f"<|options|>:\n{options_str}\n"
-                f"<|answer|>: {answer}"
+                f"<|explanation|> : {explanation}\n"
+                f"<|answer|> : {answer}"
             )
         else:
             prompt = f"<|question|>: {question}\n<|answer|>: {answer}"
@@ -81,7 +89,7 @@ class QA_Finetuning:
 
     def main(self):
         # Paths to your two datasets
-        dataset_paths = ['test_qa_mcq.json', 'test_qa_moa.json']
+        dataset_paths = ['qa_dataset/test_qa_mcq.json', 'qa_dataset/test_qa_moa.json']
         merged_data = self.merge_datasets(dataset_paths)
         
         output_file = 'liver_qa_data.jsonl'
@@ -97,8 +105,15 @@ class QA_Finetuning:
         dataset = Dataset.from_list(processed_data)
 
         # Load tokenizer and model
-        tokenizer = AutoTokenizer.from_pretrained(saved_liver_llm_model, use_fast=True)
-        model = AutoModelForCausalLM.from_pretrained(saved_liver_llm_model)
+        # tokenizer = AutoTokenizer.from_pretrained(saved_liver_llm_model, use_fast=True)
+        # model = AutoModelForCausalLM.from_pretrained(saved_liver_llm_model)
+
+        tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL_PATH, use_fast=False)
+        tokenizer.pad_token = tokenizer.eos_token
+        base_model = AutoModelForCausalLM.from_pretrained(BASE_MODEL_PATH)
+        print("This is the LORA Path :",LORA_MODEL_PATH)
+        model = PeftModel.from_pretrained(base_model, LORA_MODEL_PATH,local_files_only=True)
+        model.enable_input_require_grads()
 
         def tokenize_function(example):
             return tokenizer(
@@ -115,13 +130,19 @@ class QA_Finetuning:
             output_dir=saved_liver_llm_qa_model,
             overwrite_output_dir=True,
             num_train_epochs=3,
-            per_device_train_batch_size=2,
-            gradient_accumulation_steps=4,
-            learning_rate=2e-5,
+            per_device_train_batch_size=1,
+            gradient_accumulation_steps=2,
+            optim="paged_adamw_32bit",
+            evaluation_strategy="steps",
+            eval_steps=500,
+            learning_rate=2e-4,
             logging_steps=10,
             save_steps=500,
             save_total_limit=2,
-            fp16=True,
+            fp16=False,
+            bf16=True,
+            gradient_checkpointing=True,
+            torch_compile=True,
             report_to="none"
         )
 
@@ -130,11 +151,12 @@ class QA_Finetuning:
             mlm=False
         )
 
-        trainer = Trainer(
+        trainer = SFTTrainer(
             model=model,
             args=training_args,
             train_dataset=tokenized_dataset,
-            tokenizer=tokenizer,
+            max_seq_length=512,
+            dataset_text_field="text",
             data_collator=data_collator
         )
 
@@ -146,8 +168,3 @@ class QA_Finetuning:
         tokenizer.save_pretrained(saved_liver_llm_qa_model)
 
         print(f"✅ Finetuning complete! Model saved to {saved_liver_llm_qa_model}")
-
-
-if __name__ == '__main__':
-    qa =QA_Finetuning()
-    qa.main()
