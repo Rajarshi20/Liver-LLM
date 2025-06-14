@@ -5,3 +5,4 @@ from .pretrain_LLM import PretrainLLM
 from .pretrainDeepseek import PretrainDeepseekLLM
 from .evaluation import ModelEvaluation
 from .evaluate_qa_finetuned import FineTunedModelEvaluation
+from .compare_model_eval import ModelEvaluation_compare
