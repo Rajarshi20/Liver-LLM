@@ -1,8 +1,8 @@
 import os
 import pandas as pd
 import streamlit as st
-# from steps import DownloadPapers, ExtractPaper, TaskCreation, PretrainLLM, PretrainDeepseekLLM, ModelEvaluation, FineTunedModelEvaluation, QA_Finetuning
-from steps import DownloadPapers, ExtractPaper, TaskCreation, PretrainLLM, PretrainDeepseekLLM, ModelEvaluation, FineTunedModelEvaluation, ModelEvaluation_compare
+# from steps import DownloadPapers, ExtractPaper, TaskCreation, PretrainLLM, PretrainDeepseekLLM, ModelEvaluation, FineTunedModelEvaluation, ModelEvaluation_compare
+from steps import RetrievalAugmentedGeneration
 
 def main():
     # Step 1 : Download the papers
@@ -66,13 +66,15 @@ def create_streamlit_app():
     # Choose mode
     mode = st.radio("Choose mode", options=["Ask Questions", "Continued Learning"])
     if mode == "Ask Questions":
+        rag = RetrievalAugmentedGeneration(uploaded_file_content=uploaded_file)
         with st.form(key="question_form"):
             user_question = st.text_input("Ask a question about the paper")
             submit_question = st.form_submit_button("Submit Question")
 
             if submit_question and user_question:
                 # Replace this with your actual backend response logic
-                answer = f"📘 (Dummy Answer): You asked - '{user_question}'"
+                res = rag.main(query=user_question)
+                answer = f"📘 {res}"
                 st.session_state.qa_history.append((user_question, answer))
 
     # Show Q&A History
@@ -85,8 +87,6 @@ def create_streamlit_app():
 
     elif mode == "Continued Learning":
         st.text_area("Continue learning notes or reflections here...")
-    """ fteval = FineTunedModelEvaluation()
-    fteval.main() """
 
 
 if __name__ == '__main__':
