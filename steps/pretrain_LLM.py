@@ -17,8 +17,8 @@ from transformers import (
 from datasets import Dataset
 from peft import LoraConfig, get_peft_model
 from huggingface_hub import login
-from config import pretrain_model_id, pretrain_data_dir, pretrain_output_dir, saved_liver_llm_model
-
+os.environ["HF_HOME"] = "/hkfs/work/workspace/scratch/st_st191428-LiverLLM/hf_cache"
+os.environ["TRANSFORMERS_CACHE"] = "/hkfs/work/workspace/scratch/st_st191428-LiverLLM/hf_cache"
 load_dotenv()
 
 class PretrainLLM:
@@ -26,9 +26,9 @@ class PretrainLLM:
 
     def __init__(
         self,
-        model_id: str = "meta-llama/Meta-Llama-3-8B-Instruct",
+        model_id: str = "meta-llama/Meta-Llama-3-8B",
         data_dir: str = "data",
-        output_dir: str = "llama3-medical-finetuned",
+        output_dir: str = "llama3_medical_finetuned",
         block_size: int = 2048,
         batch_size: int = 2,
         gradient_accumulation_steps: int = 8,
@@ -143,7 +143,7 @@ class PretrainLLM:
 
     def _tokenize_function(self, examples: Dict[str, List[str]]) -> Dict[str, List[int]]:
         print("Tokenization done")
-        return self.tokenizer(examples["text"], return_special_tokens_mask=True, truncation=True, max_length=4096)
+        return self.tokenizer(examples["text"], return_special_tokens_mask=True, truncation=True, max_length=self.block_size)
 
     def _group_texts(self, examples: Dict[str, List[int]]) -> Dict[str, List[List[int]]]:
         concatenated = {k: sum(examples[k], []) for k in examples.keys()}
@@ -187,8 +187,12 @@ class PretrainLLM:
             tokenizer=self.tokenizer,
             data_collator=self.data_collator,
         )
-        trainer.train()
-        # trainer.save_model(str(saved_liver_llm_model))
-        # self.tokenizer.save_pretrained(str(saved_liver_llm_model))
+        checkpoint_path = str(self.output_dir / "checkpoint-1000")
+        if os.path.isdir(checkpoint_path):
+            print(f"Resuming training from checkpoint: {checkpoint_path}")
+            trainer.train(resume_from_checkpoint=checkpoint_path)
+        else:
+            print("No checkpoint found, starting from scratch.")
+            trainer.train()
         trainer.save_model(str(self.output_dir / "final_model"))
         self.tokenizer.save_pretrained(str(self.output_dir / "final_model"))

@@ -2,6 +2,7 @@ import os
 import pandas as pd
 import streamlit as st
 # from steps import DownloadPapers, ExtractPaper, TaskCreation, PretrainLLM, PretrainDeepseekLLM, ModelEvaluation, FineTunedModelEvaluation, QA_Finetuning
+from steps import DownloadPapers, ExtractPaper, TaskCreation, PretrainLLM, PretrainDeepseekLLM, ModelEvaluation, FineTunedModelEvaluation, ModelEvaluation_compare
 
 def main():
     # Step 1 : Download the papers
@@ -84,6 +85,9 @@ def create_streamlit_app():
 
     elif mode == "Continued Learning":
         st.text_area("Continue learning notes or reflections here...")
+    """ fteval = FineTunedModelEvaluation()
+    fteval.main() """
+
 
 if __name__ == '__main__':
     # main()
