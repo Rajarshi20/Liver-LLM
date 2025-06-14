@@ -1,6 +1,6 @@
 import os
 import pandas as pd
-from steps import DownloadPapers, ExtractPaper, TaskCreation, PretrainLLM, PretrainDeepseekLLM, ModelEvaluation, FineTunedModelEvaluation
+from steps import DownloadPapers, ExtractPaper, TaskCreation, PretrainLLM, PretrainDeepseekLLM, ModelEvaluation, FineTunedModelEvaluation, ModelEvaluation_compare
 
 def main():
     # Step 1 : Download the papers
@@ -33,8 +33,12 @@ def main():
     """ evaluator = ModelEvaluation()
     evaluator.main() """
 
-    fteval = FineTunedModelEvaluation()
-    fteval.main()
+    """ fteval = FineTunedModelEvaluation()
+    fteval.main() """
+
+    #TO compare base model and fine tuned model evaluation
+    compare_model_eval = ModelEvaluation_compare()
+    compare_model_eval.main()
 
 if __name__ == '__main__':
     main()
