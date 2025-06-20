@@ -6,6 +6,7 @@ attrs
 bitsandbytes
 certifi
 charset-normalizer
+chromadb
 colorama
 datasets
 dill
