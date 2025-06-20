@@ -7,3 +7,4 @@ from .perplexity_pretrained_model import PPL_Evaluator
 from .base_model_eval import BaseModelEvaluation
 from .evaluate_qa_finetuned import FineTunedModelEvaluation
 from .finetuned_model_eval import Finetuned_ModelEval
+from .rag import RetrievalAugmentedGeneration
