@@ -167,4 +167,4 @@ class QA_Finetuning:
         trainer.save_model(saved_liver_llm_qa_model)
         tokenizer.save_pretrained(saved_liver_llm_qa_model)
 
-        print(f"✅ Finetuning complete! Model saved to {saved_liver_llm_qa_model}")
+        print(f"Finetuning complete! Model saved to {saved_liver_llm_qa_model}")

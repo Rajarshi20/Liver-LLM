@@ -1,0 +1,56 @@
+? Hugging Face token is set.
+wandb token is set
+This is the LORA Path: /hkfs/work/workspace/scratch/st_st191428-LiverLLM/Liver LLM/llama3_medical_finetuned/checkpoint_6000
+Base model perplexity: 21.01
+Pretrained model perplexity: 20.83
+
+============================= JOB FEEDBACK =============================
+
+Job ID: 3274955
+Cluster: hk
+User/Group: st_st191428/hk-project-p00201316
+Account: hk-project-p00201316
+State: COMPLETED (exit code 0)
+Partition: accelerated
+Nodes: 1
+Cores per node: 32
+Nodelist: hkn0418
+CPU Utilized: 00:00:50
+CPU Efficiency: 1.32% of 01:02:56 core-walltime
+Job Wall-clock time: 00:01:58
+Starttime: Thu Jun 19 15:50:02 2025
+Endtime: Thu Jun 19 15:52:00 2025
+Memory Utilized: 4.61 GB
+Memory Efficiency: 0.00% of 0.00 MB
+Energy Consumed: 55481 Joule / 15.4113888888889 Watthours
+Average node power draw: 470.177966101695 Watt
+
+
+
+
+? Hugging Face token is set.
+wandb token is set
+This is the LORA Path: /hkfs/work/workspace/scratch/st_st191428-LiverLLM/Liver LLM/llama3_medical_finetuned/checkpoint_6000
+Base model perplexity: 12.38
+Pretrained model perplexity: 11.85
+
+============================= JOB FEEDBACK =============================
+
+Job ID: 3275566
+Cluster: hk
+User/Group: st_st191428/hk-project-p00201316
+Account: hk-project-p00201316
+State: COMPLETED (exit code 0)
+Partition: accelerated
+Nodes: 1
+Cores per node: 32
+Nodelist: hkn0416
+CPU Utilized: 00:00:56
+CPU Efficiency: 1.52% of 01:01:20 core-walltime
+Job Wall-clock time: 00:01:55
+Starttime: Thu Jun 19 19:25:28 2025
+Endtime: Thu Jun 19 19:27:23 2025
+Memory Utilized: 6.69 GB
+Memory Efficiency: 0.00% of 0.00 MB
+Energy Consumed: 53092 Joule / 14.7477777777778 Watthours
+Average node power draw: 461.669565217391 Watt
