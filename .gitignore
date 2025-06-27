@@ -7,4 +7,12 @@ cleaned_csv
 extracted_chunked_text
 tasks
 .env
+<<<<<<< HEAD
 qa_dataset
+=======
+qa_dataset
+adv_cleaned_tasks
+pretraining_checkpoints
+steps_old_vscode
+old_steps_horeka
+>>>>>>> 6e00d14fb0ee57987f0241be59598608c1c40921

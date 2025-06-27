@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import List, Dict
 from datasets import Dataset, concatenate_datasets
 from dotenv import load_dotenv
+from shutil import rmtree
+
 
 import torch
 from transformers import (
@@ -85,7 +87,7 @@ class NewPretrainLLM:
         lora_config = LoraConfig(
             r=64,
             lora_alpha=16,
-            target_modules=["q_proj", "v_proj"],
+            target_modules=["q_proj", "v_proj", "k_proj", "o_proj"],
             lora_dropout=0.1,
             bias="none",
             task_type="CAUSAL_LM",
@@ -96,9 +98,32 @@ class NewPretrainLLM:
         return model
 
     def _load_and_prepare_dataset(self, file_path: Path) -> Dataset:
-        with open(file_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            text_data = [chunk["text"] for doc in data for chunk in doc.get("chunks", []) if chunk.get("text", "").strip()]
+        try:
+          with open(file_path, "r", encoding="utf-8") as f:
+              data = json.load(f)
+  
+          # ? Check if it's a list of dicts with "chunks" field
+          if not isinstance(data, list) or not all(isinstance(doc, dict) and "chunks" in doc for doc in data):
+              print(f"Invalid JSON structure in {file_path.name} skipping")
+              return None, None
+
+        except json.JSONDecodeError:
+            print(f"Failed to decode JSON in {file_path.name} skipping")
+            return None, None
+        except Exception as e:
+            print(f"Error reading {file_path.name}: {e} skipping")
+            return None, None
+            
+        text_data = [chunk["text"] for doc in data for chunk in doc.get("chunks", []) if chunk.get("text", "").strip()]
+            
+        if not text_data:
+            print(f"Skipping {file_path.name} no valid text chunks found.")
+            return None, None
+        
+        if len(text_data) < 10:
+            print(f"Skipping {file_path.name}: not enough valid text chunks ({len(text_data)}).")
+            return None, None
+
         raw_dataset = Dataset.from_list([{"text": t} for t in text_data])
         raw_dataset = raw_dataset.train_test_split(test_size=0.05)
 
@@ -137,8 +162,9 @@ class NewPretrainLLM:
             fp16=False,
             bf16=True,
             report_to="wandb",
-            evaluation_strategy="steps",
+            #evaluation_strategy="steps",
             eval_steps=500,
+            do_eval= True,
             remove_unused_columns=False,
             gradient_checkpointing=True,
             torch_compile=False,
@@ -149,6 +175,15 @@ class NewPretrainLLM:
         login(self.LLAMA_API)
         replay_buffer = []
         json_files = sorted(self.data_dir.glob("*.json"))
+        
+        #completed_tasks = {int(p.stem.split("_")[1]) for p in self.output_dir.glob("task_*_buffer")}
+        #MAX_REPLAY_BUFFERS = 10
+        #all_buffers = sorted(self.output_dir.glob("task_*_buffer"), key=lambda p: int(p.stem.split("_")[1]))
+        #replay_buffer = all_buffers[-MAX_REPLAY_BUFFERS:]
+        
+        resume_checkpoint = self.output_dir / "checkpoint-1"
+        start_task_index = 3908
+        
 
         wandb.init(
             project="llama3_medical",
@@ -158,29 +193,65 @@ class NewPretrainLLM:
             name="continual_adaptation_run"
         )
         for i, file_path in enumerate(json_files):
-            print(f"\nTask {i+1}/{len(json_files)}: {file_path.name}")
-            current_train, current_val = self._load_and_prepare_dataset(file_path)
+          if i < start_task_index:
+            continue #skiiping task files that are completed
+          #if i in completed_tasks:
+          #  print(f"Skipping already processed task {i}")
+          #  continue
+    
+          print(f"\nTask {i+1}/{len(json_files)}: {file_path.name}")
+          
+          current_train, current_val = self._load_and_prepare_dataset(file_path)
+          
 
-            # Optionally repeat current data 3x for stronger learning
-            weighted_current = concatenate_datasets([current_train] * 3)
-            combined_dataset = [weighted_current] + [Dataset.load_from_disk(p) for p in replay_buffer]
-            final_train_dataset = concatenate_datasets(combined_dataset).shuffle(seed=42)
+          if current_train is None:
+              print(f"Skipping task {i} due to empty or invalid data.")
+              continue
+              
+          if len(current_train) < 2:
+            print(f"Skipping task {i} too few samples after tokenization.")
+            continue
+            
 
-            trainer = Trainer(
-                model=self.model,
-                args=self.training_args,
-                train_dataset=final_train_dataset,
-                eval_dataset=current_val,
-                tokenizer=self.tokenizer,
-                data_collator=self.data_collator,
-            )
+          # Optionally repeat current data 3x for stronger learning
+          final_train_dataset = current_train.shuffle(seed=42)
 
+          trainer = Trainer(
+              model=self.model,
+              args=self.training_args,
+              train_dataset=final_train_dataset,
+              eval_dataset=current_val,
+              tokenizer=self.tokenizer,
+              data_collator=self.data_collator,
+          )
+          
+          current_task_name = file_path.name
+
+          # Save checkpoint BEFORE processing task_06900.json
+          #if current_task_name == "task_06970.json":
+              #ckpt_path = self.output_dir / "checkpoint_before_task_06970"
+              #print(f"Saving checkpoint before processing {current_task_name}")
+              #self.model.save_pretrained(str(ckpt_path))
+              #self.tokenizer.save_pretrained(str(ckpt_path))
+
+          if i == start_task_index:
+            trainer.train(resume_from_checkpoint=str(resume_checkpoint))
+          else:
             trainer.train()
-            wandb.finish()
-            # Save current processed dataset to disk
-            buffer_path = self.output_dir / f"task_{i}_buffer"
-            current_train.save_to_disk(buffer_path)
-            replay_buffer.append(buffer_path)
+          wandb.finish()
+          
+          # Save current processed dataset to disk
+          #buffer_path = self.output_dir / f"task_{i}_buffer"
+          #current_train.save_to_disk(buffer_path)
+          #replay_buffer.append(buffer_path)
+          
+          if i == 7105:
+            ckpt_path = self.output_dir / f"checkpoint_{i}"
+            print(f" Saving checkpoint at task {i}")
+            trainer.save_model(str(ckpt_path))
+            self.tokenizer.save_pretrained(str(ckpt_path))
+          
+          
 
         self.model.save_pretrained(str(self.output_dir / "final_model"))
         self.tokenizer.save_pretrained(str(self.output_dir / "final_model"))

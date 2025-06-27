@@ -2,6 +2,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from peft import PeftModel
 import torch
 import math
+import json
 from config import BASE_MODEL_PATH, LORA_MODEL_PATH
 
 class PPL_Evaluator:
@@ -42,17 +43,17 @@ class PPL_Evaluator:
         avg_loss = sum(losses) / len(losses)
         perplexity = math.exp(avg_loss)
         return perplexity
+        
+    def load_text_chunks_from_json(self,path):
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return [item["text"] for item in data if item.get("text")]
 
     def main(self):
-        medical_texts = [
-            "Toll-like receptor 4 (TLR4) is a key player in airway inflammation.",
-            "The Knodell score assesses necroinflammatory injury and fibrosis in chronic hepatitis.",
-            "Asthma is widely considered to stem from allergen-specific Thelper type 2 (Th2) responses that result in eosinophilic inflammation but, in many individuals, neutrophils are the predominant leukocytes in the airway.",
-            "Epidermal growth factor receptor seems to be a direct target of the pathway, and its activation might contribute toward mitogenic effects of increased β-catenin in the liver.",
-        ]
+        texts = self.load_text_chunks_from_json("qa_dataset/eval_text_chunks.json")
 
-        base_ppl = self.compute_perplexity(BASE_MODEL_PATH, medical_texts)
-        pretrained_ppl = self.compute_perplexity(BASE_MODEL_PATH, medical_texts, lora_path=LORA_MODEL_PATH)
+        base_ppl = self.compute_perplexity(BASE_MODEL_PATH, texts)
+        pretrained_ppl = self.compute_perplexity(BASE_MODEL_PATH, texts, lora_path=LORA_MODEL_PATH)
 
         print(f"Base model perplexity: {base_ppl:.2f}")
         print(f"Pretrained model perplexity: {pretrained_ppl:.2f}")

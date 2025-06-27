@@ -1,0 +1,32 @@
+? Hugging Face token is set.
+wandb token is set
+Loading model and tokenizer...
+This is the QA fine tuned MCQ Path : /hkfs/work/workspace/scratch/st_st191428-LiverLLM/Liver LLM/llama3-qa-finetuned/moa_model
+Evaluating General QA...
+QA loaded from the dataset  {'question': 'What is the outlook for Klver-Bucy Syndrome ?', 'answer': 'There is no cure for Klver-Bucy syndrome. The disorder is not life-threatening, but the patient can be difficult to manage. With treatment, symptoms may slowly decline.'}
+Generated predictions from model:  The prognosis for Klver-Bucy Syndrome is poor because the underlying cause is often a severe brain injury. Patients with Klver-Bucy Syndrome may not recover fully and may require ongoing care. Patients with Klver-Bucy Syndrome may experience problems with behavior, cognition, and movement. Patients with Klver-Bucy Syndrome may require rehabilitation or supportive care. Patients with Klver-Bucy Syndrome may have difficulty with activities of daily living, such as eating and bathing. Patients with Klver-Bucy Syndrome may experience changes in mood and behavior, such as agitation or aggression. Patients with Klver-Bucy Syndrome may experience changes in personality, such as increased impulsivity or disinhibition. Patients with Klver-Bucy Syndrome may experience changes in social behavior, such as increased social withdrawal. Patients with Klver-Bucy Syndrome may experience changes in emotional regulation, such as increased anxiety or depression. Patients with Klver-Bucy Syndrome may experience changes in motor function, such as difficulty walking or balance. Patients with Klver-Bucy Syndrome may experience changes in vision, such as double vision or blurred vision. Patients with Klver-Bucy Syndrome may experience changes in hearing, such as difficulty hearing or ringing in the ears. Patients with Klver-Bucy Syndrome may experience changes in smell or taste, such as difficulty smelling or tasting food. Patients with Klver-Bucy Syndrome may experience changes in the functioning of the autonomic nervous system, such as difficulty regulating heart rate or blood pressure. Patients with Klver-Bucy Syndrome may experience changes in the functioning of the endocrine system, such as difficulty regulating hormone levels. Patients with Klver-Bucy Syndrome may experience changes in the functioning of the immune system, such as difficulty fighting infection. Patients with Klver-Bucy Syndrome may experience changes in the functioning of the gastrointestinal system, such as difficulty digesting food. Patients with Klver-Bucy Syndrome may experience changes in the functioning of the respiratory system, such as difficulty breathing. Patients with Klver-Bucy Syndrome may experience changes in the functioning of the cardiovascular system, such as difficulty regulating heart rate or blood pressure. Patients with Klver-Bucy Syndrome may experience changes in the functioning of the musculoskeletal system, such as difficulty moving or controlling muscles. Patients with Klver-Bucy Syndrome may experience changes in the functioning of the nervous system, such as difficulty coordinating movement or speaking. Patients with Klver-Bucy Syndrome may experience changes in the functioning of the reproductive
+Answer from the QA dataset:  There is no cure for Klver-Bucy syndrome. The disorder is not life-threatening, but the patient can be difficult to manage. With treatment, symptoms may slowly decline.
+BLEU: {'bleu': 0.01080467563110668, 'precisions': [0.10190490550864495, 0.018542779401390708, 0.004521115376843807, 0.0015952597994530538], 'brevity_penalty': 1.0, 'length_ratio': 2.8699603317706455, 'translation_length': 39792, 'reference_length': 13865}
+ROUGE: {'rouge1': np.float64(0.13146445110923444), 'rouge2': np.float64(0.02676965557010228), 'rougeL': np.float64(0.08547160239643382), 'rougeLsum': np.float64(0.08869345640595572)}
+Exact Match Accuracy: 0.0
+
+============================= JOB FEEDBACK =============================
+
+Job ID: 3290483
+Cluster: hk
+User/Group: st_st191428/hk-project-p00201316
+Account: hk-project-p00201316
+State: COMPLETED (exit code 0)
+Partition: accelerated-h100
+Nodes: 1
+Cores per node: 32
+Nodelist: hkn0914
+CPU Utilized: 00:19:44
+CPU Efficiency: 2.98% of 11:02:56 core-walltime
+Job Wall-clock time: 00:20:43
+Starttime: Wed Jun 25 12:49:50 2025
+Endtime: Wed Jun 25 13:10:33 2025
+Memory Utilized: 26.89 GB
+Memory Efficiency: 0.00% of 0.00 MB
+Energy Consumed: 1250839 Joule / 347.455277777778 Watthours
+Average node power draw: 1006.30651649236 Watt
