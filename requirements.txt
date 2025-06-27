@@ -48,7 +48,6 @@ scipy
 sentence-transformers
 setuptools
 six
-spacy
 sympy
 threadpoolctl
 tokenizers
