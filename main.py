@@ -1,5 +1,7 @@
 import os
 import pandas as pd
+from steps import DownloadPapers, ExtractPaper, TaskCreation, PretrainLLM, PPL_Evaluator, BaseModelEvaluation, FineTunedModelEvaluation, Finetuned_ModelEval
+from steps import NewPretrainLLM
 import streamlit as st
 # from steps import DownloadPapers, ExtractPaper, TaskCreation, PretrainLLM, PretrainDeepseekLLM, ModelEvaluation, FineTunedModelEvaluation, ModelEvaluation_compare
 from steps import RetrievalAugmentedGeneration
@@ -24,6 +26,11 @@ def main():
     # )
     # trainer.train() """
 
+    trainer = NewPretrainLLM()
+    trainer.continual_loop()
+
+    """ evaluator = ModelEvaluation()
+    evaluator.main() """
     # # Step 5: Pretrain the Deepseek R1 model
     # """  deepseek = PretrainDeepseekLLM(
     #     model_id="deepseek-ai/deepseek-llm-r1",
@@ -88,7 +95,18 @@ def create_streamlit_app():
     elif mode == "Continued Learning":
         st.text_area("Continue learning notes or reflections here...")
 
+    #TO compare base model and fine tuned model evaluation
+    """ ft_model_eval = Finetuned_ModelEval()
+    ft_model_eval.main()
 
+    base_model_eval = BaseModelEvaluation()
+    base_model_eval.main()
+    """
+
+    """ ppl_eval = PPL_Evaluator()
+    ppl_eval.main()
+ """
+    
 if __name__ == '__main__':
     # main()
     create_streamlit_app()
