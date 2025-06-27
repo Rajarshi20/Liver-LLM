@@ -12,19 +12,27 @@ from nltk.tokenize import word_tokenize
 import json
 
 
-from config import BASE_MODEL_PATH, LORA_MODEL_PATH, QA_DATASET_PATH
+#from config import BASE_MODEL_PATH, QA_FINETUNED_MOA_MODEL_PATH, QA_FINETUNED_MOA_VALIDATION_DATASET
+from config import BASE_MODEL_PATH, QA_FINETUNED_MCQ_MODEL_PATH, QA_FINETUNED_MCQ_VALIDATION_DATASET
 
-class ModelEvaluation:
+class FineTunedModelEvaluation:
     def __init__(self):
         self.MAX_NEW_TOKENS = 128
         self.DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
     def load_model_and_tokenizer(self, base_path, lora_path):
-        tokenizer = AutoTokenizer.from_pretrained(base_path, use_fast=False)
-        tokenizer.pad_token = tokenizer.eos_token
-        base_model = AutoModelForCausalLM.from_pretrained(base_path)
-        print("This is the LORA Path :",lora_path)
-        model = PeftModel.from_pretrained(base_model, lora_path,local_files_only=True)
+        print("This is the QA fine tuned MCQ Path :",lora_path)
+        # FOR MOA, load from PEFT
+        #tokenizer = AutoTokenizer.from_pretrained(base_path, use_fast=False)
+        #tokenizer.pad_token = tokenizer.eos_token
+        #base_model = AutoModelForCausalLM.from_pretrained(base_path)
+        #model = PeftModel.from_pretrained(base_model, lora_path,local_files_only=True)
+        
+        # FOR MCQ, directly load the model
+        tokenizer = AutoTokenizer.from_pretrained(lora_path, use_fast=False)
+        #tokenizer.pad_token = tokenizer.eos_token
+        model = AutoModelForCausalLM.from_pretrained(lora_path, local_files_only=True)
+        
         model.eval().to(self.DEVICE)
         pipeline = TextGenerationPipeline(model=model, tokenizer=tokenizer, device=0 if self.DEVICE == "cuda" else -1)
         return tokenizer, model, pipeline
@@ -60,7 +68,15 @@ class ModelEvaluation:
     def generate_general_answers(self, pipeline, dataset):
         predictions = []
         for item in dataset:
-            prompt = f"Question: {item['question']}\nAnswer:"
+            prompt = (
+                f"### INSTRUCTION:\n"
+                f"You are a helpful medical assistant trained on liver diseases.\n"
+                f"Study and respond accurately to the question below.\n"
+                f"### INPUT:\n"
+                f"Question: {item['question']}\n"
+                f"### OUTPUT:\n"
+                f"Answer:"
+            )
             output = pipeline(prompt, max_new_tokens=self.MAX_NEW_TOKENS, pad_token_id=pipeline.tokenizer.eos_token_id)[0]['generated_text']
             answer = output.split("Answer:")[-1].strip()
             predictions.append(answer)
@@ -69,14 +85,21 @@ class ModelEvaluation:
     def generate_mcq_answers(self, pipeline, dataset):
         predictions, references = [], []
         for item in dataset:
-            prompt = f"Question: {item['question']}\n"
+            prompt = (
+                f"### INSTRUCTION:\n"
+                f"You are a helpful medical assistant trained on liver diseases.\n"
+                f"Study the following multiple-choice question and select the correct option.\n"
+                f"### INPUT:\n"
+                f"Question: {item['question']}\n"
+                f"OPTIONS:\n"
+            )
             for key, value in item['options'].items():
                 prompt += f"{key}. {value}\n"
-            prompt += "Answer (a/b/c/d):"
+            prompt += "Answer (a/b/c/d/e):"
             output = pipeline(prompt, max_new_tokens=10, pad_token_id=pipeline.tokenizer.eos_token_id)[0]['generated_text']
             pred = output.split("Answer")[-1].strip().lower()
             # Normalize to option letter
-            for opt in ['a', 'b', 'c', 'd']:
+            for opt in ['a', 'b', 'c', 'd', 'e']:
                 if opt in pred:
                     predictions.append(opt)
                     break
@@ -99,7 +122,6 @@ class ModelEvaluation:
         return {
             "BLEU": bleu_score,
             "ROUGE": rouge_score,
-            #"Perplexity": ppl_score,
             "Exact Match Accuracy": acc
         }
 
@@ -111,26 +133,59 @@ class ModelEvaluation:
 
     def main(self):
         print("Loading model and tokenizer...")
-        tokenizer, model, pipeline = self.load_model_and_tokenizer(BASE_MODEL_PATH, LORA_MODEL_PATH)
+        #tokenizer, model, pipeline = self.load_model_and_tokenizer(BASE_MODEL_PATH, QA_FINETUNED_MOA_MODEL_PATH)
+        tokenizer, model, pipeline = self.load_model_and_tokenizer(BASE_MODEL_PATH, QA_FINETUNED_MCQ_MODEL_PATH)
 
+        """
         print("Evaluating General QA...")
-        general_qa = self.load_general_qa(QA_DATASET_PATH)
-        print("QA loaded from the dataset ", general_qa[1])
+        general_qa = self.load_general_qa(QA_FINETUNED_MOA_VALIDATION_DATASET)
+        print("QA loaded from the dataset ", general_qa[0])
         general_predictions = self.generate_general_answers(pipeline, general_qa)
-        print("Generated predictions from model: ",general_predictions[1])
+        print("Generated predictions from model: ",general_predictions[0])
         general_references = [item['answer'] for item in general_qa]
-        print("Answer from the QA dataset: ",general_references[1])
+        print("Answer from the QA dataset: ",general_references[0])
         general_scores = self.evaluate_general(general_predictions, general_references)
+        
+        # Save General QA Results
+        general_output = [
+        {
+            "question": item['question'],
+            "predicted_answer": pred,
+            "reference_answer": item['answer']
+        }
+        for item, pred in zip(general_qa, general_predictions)
+        ]
+        with open("general_qa_predictions.json", "w") as f:
+            json.dump(general_output, f, indent=2)
+        
         for k, v in general_scores.items():
             print(f"{k}: {v}")
+        """
 
         print("\nEvaluating MCQ QA...")
-        mcq_qa = self.load_mcq_qa(QA_DATASET_PATH)
-        print("MCQ data from dataset: ",mcq_qa[1])
+        mcq_qa = self.load_mcq_qa(QA_FINETUNED_MCQ_VALIDATION_DATASET)
+        print('Evaluation the first question:')
+        print("MCQ data from dataset: ",mcq_qa[0])
         mcq_predictions, mcq_references = self.generate_mcq_answers(pipeline, mcq_qa)
-        print("Predicted Option: ",mcq_predictions)
-        print("Actual Option: ",mcq_references)
+        print("Predicted Option: ",mcq_predictions[0])
+        print("Actual Option: ",mcq_references[0])
+        print()
         mcq_scores = self.evaluate_mcq(mcq_predictions, mcq_references)
+        for k, v in mcq_scores.items():
+            print(f"{k}: {v}")
+            
+        mcq_output = [
+            {
+               "question": item['question'],
+               "options": item.get('options', None),
+               "predicted_option": pred,
+               "reference_option": ref
+            }
+            for item, pred, ref in zip(mcq_qa, mcq_predictions, mcq_references)
+        ]
+        with open("mcq_qa_predictions.json", "w") as f:
+            json.dump(mcq_output, f, indent=2)
+    
         for k, v in mcq_scores.items():
             print(f"{k}: {v}")
 

@@ -8,3 +8,7 @@ extracted_chunked_text
 tasks
 .env
 qa_dataset
+adv_cleaned_tasks
+pretraining_checkpoints
+steps_old_vscode
+old_steps_horeka
