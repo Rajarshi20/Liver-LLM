@@ -12,3 +12,4 @@ adv_cleaned_tasks
 pretraining_checkpoints
 steps_old_vscode
 old_steps_horeka
+*.safetensors
