@@ -20,8 +20,10 @@ from peft import LoraConfig, get_peft_model
 from huggingface_hub import login
 import wandb
 
-os.environ["HF_HOME"] = "/hkfs/work/workspace/scratch/st_st191428-LiverLLM/hf_cache"
-os.environ["TRANSFORMERS_CACHE"] = "/hkfs/work/workspace/scratch/st_st191428-LiverLLM/hf_cache"
+from config import BASE_MODEL_PATH
+
+os.environ["HF_HOME"] = "/path_to_GPU_/workspace/scratch/LiverLLM/hf_cache"
+os.environ["TRANSFORMERS_CACHE"] = "/path_to_GPU/work/workspace/scratch/LiverLLM/hf_cache"
 load_dotenv()
 wandb.login()
 
@@ -30,7 +32,7 @@ class NewPretrainLLM:
 
     def __init__(
         self,
-        model_id: str = "meta-llama/Meta-Llama-3-8B",
+        model_id: str = BASE_MODEL_PATH,
         data_dir: str = "adv_cleaned_tasks",
         output_dir: str = "llama3_medical_finetuned",
         block_size: int = 2048,

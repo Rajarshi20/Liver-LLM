@@ -4,13 +4,14 @@ from transformers import AutoTokenizer
 import json
 import re
 import logging
+from config import BASE_MODEL_PATH
 
 class ExtractPaper:
     PDF_DIR = "papers/"
     OUTPUT_DIR = "extracted_chunked_text/"
     BATCH_SIZE = 1  # adjust based on memory
-    MODEL_NAME = "meta-llama/Meta-Llama-3-8B"
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    # LOCAL_BASE_MODEL_PATH = r"/mnt/beegfs/home/st191428/base_model"  # -- use this when a local copy of the LLM is saved on the GPU
+    tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL_PATH)
 
     # Extract text from PDF
     def extract_text_from_pdf(self, pdf_path):
@@ -57,6 +58,26 @@ class ExtractPaper:
         text = re.sub(r'[^a-zA-Z0-9.,;:\-()%\s]', '', text)  # Remove unwanted chars
         text = re.sub(r'\s+', ' ', text).strip()
         text = re.split(r'(references|acknowledgements|conflicts of interest)', text, flags=re.IGNORECASE)[0]
+        text = re.sub(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.\w+', '', text)
+        text = re.sub(r'\(?Tel[:]?[^;]*[;.]?', '', text)
+        text = re.sub(r'\(?Fax[:]?[^;]*[;.]?', '', text)
+        text = re.sub(r'\d+[%\w/\-]+', '', text)
+        text = re.sub(r'\.{2,}', '.', text)
+        text = re.sub(r'[\[\]\(\)\{\}]', '', text)
+        # Removing citations
+        text = re.sub(r'\([A-Za-z]+ et al,? \d{4}\)', '', text)
+        text = re.sub(r'\[\d+\]', '', text)
+        text = re.sub(r'\b(doi|pmid|pmcid|fig|table)\.? ?\d*\b', '', text, flags=re.IGNORECASE)
+        patterns = [
+            r'\b[A-Z][a-z]+, [A-Z]\. [A-Z]\.',
+            r'\b(university|hospital|department|center|clinic|institute|school|laboratory)[^.,;]*[.,;]',
+            r'www\.[^\s]+',
+            r'http[s]?://[^\s]+',
+            r'\b[jJ] ?med genet\b.*?\.',
+            r'protected by copyright.*?technologies\.',
+        ]
+        for pat in patterns:
+            text = re.sub(pat, '', text, flags=re.IGNORECASE | re.DOTALL)
         
         return text
 

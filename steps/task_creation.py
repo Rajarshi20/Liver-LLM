@@ -6,7 +6,7 @@ from tqdm import tqdm
 class TaskCreation:
     INPUT_DIR = "extracted_chunked_text/"
     OUTPUT_DIR = "tasks/"
-    MAY_TOKENS_PER_TASK = 8192  # You can try increasing this to 12000–16000 for testing
+    MAX_TOKENS_PER_TASK = 8192  # You can try increasing this to 12000–16000 for testing
 
     paper_data = []
 
@@ -38,7 +38,7 @@ class TaskCreation:
 
         for paper in self.paper_data:
             paper_tokens = paper["tokens"]
-            if current_tokens + paper_tokens > self.MAY_TOKENS_PER_TASK and current_task:
+            if current_tokens + paper_tokens > self.MAX_TOKENS_PER_TASK and current_task:
                 print(f"✅ Writing task_{task_id:05d}.json with {len(current_task)} papers, total tokens: {current_tokens}")
                 with open(os.path.join(self.OUTPUT_DIR, f"task_{task_id:05d}.json"), "w") as f:
                     json.dump(current_task, f, indent=2)

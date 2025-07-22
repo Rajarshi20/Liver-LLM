@@ -1,191 +1,140 @@
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, TextGenerationPipeline
-from peft import PeftModel
-from datasets import load_dataset
-import evaluate
-import nltk
-#nltk.download("punkt_tab")
-
-nltk.data.path.append("/hkfs/work/workspace/scratch/st_st191428-LiverLLM/Liver LLM/liverenv/lib/nltk_data/tokenizers/")
-
-from nltk.tokenize import word_tokenize
 import json
+import torch
+import numpy as np
+from torch import nn
+from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+from config import QA_FINETUNED_MCQ_MODEL_PATH, QA_FINETUNED_MCQ_VALIDATION_DATASET
 
+# Classifier wrapper
+class MultiTaskLiverModel(nn.Module):
+    def __init__(self, base_model, num_labels=5):
+        super().__init__()
+        self.base_model = base_model
+        self.classifier = nn.Linear(self.base_model.config.hidden_size, num_labels)
 
-#from config import BASE_MODEL_PATH, QA_FINETUNED_MOA_MODEL_PATH, QA_FINETUNED_MOA_VALIDATION_DATASET
-from config import BASE_MODEL_PATH, QA_FINETUNED_MCQ_MODEL_PATH, QA_FINETUNED_MCQ_VALIDATION_DATASET
+    def forward(self, input_ids, attention_mask=None, labels=None, task_type="mcq", **kwargs):
+        base_outputs = self.base_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            return_dict=True,
+            output_hidden_states=True,
+        )
 
-class FineTunedModelEvaluation:
+        if task_type == "mcq":
+            last_hidden = base_outputs.hidden_states[-1]  # (batch_size, seq_len, hidden)
+            cls_token = last_hidden[:, 0, :]               # take [CLS]-like token at position 0
+            logits = self.classifier(cls_token)
+
+            loss = None
+            if labels is not None:
+                loss = nn.CrossEntropyLoss()(logits, labels)
+
+            return {"loss": loss, "logits": logits}
+        else:
+            return self.base_model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+
+class FineTunedModelEvaluationMCQ:
     def __init__(self):
-        self.MAX_NEW_TOKENS = 128
-        self.DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    def load_model_and_tokenizer(self, base_path, lora_path):
-        print("This is the QA fine tuned MCQ Path :",lora_path)
-        # FOR MOA, load from PEFT
-        #tokenizer = AutoTokenizer.from_pretrained(base_path, use_fast=False)
-        #tokenizer.pad_token = tokenizer.eos_token
-        #base_model = AutoModelForCausalLM.from_pretrained(base_path)
-        #model = PeftModel.from_pretrained(base_model, lora_path,local_files_only=True)
-        
-        # FOR MCQ, directly load the model
-        tokenizer = AutoTokenizer.from_pretrained(lora_path, use_fast=False)
-        #tokenizer.pad_token = tokenizer.eos_token
-        model = AutoModelForCausalLM.from_pretrained(lora_path, local_files_only=True)
-        
-        model.eval().to(self.DEVICE)
-        pipeline = TextGenerationPipeline(model=model, tokenizer=tokenizer, device=0 if self.DEVICE == "cuda" else -1)
-        return tokenizer, model, pipeline
+    def load_model_and_tokenizer(self, model_path):
+        print(f"Loading model from: {model_path}")
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_use_double_quant=False,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.bfloat16,
+        )
 
-    def load_general_qa(self, path):
-        general_qa = []
-        with open(path, "r", encoding="utf-8") as f:
-          for line in f:
-            line = line.strip()
-            if not line:
-              continue
-            obj = json.loads(line)
-            if obj.get("type") == "MOA":
-              general_qa.append({"question": obj["question"], "answer": obj["answer"]})
-        return general_qa
-    
-    def load_mcq_qa(self, path):
-        mcq_qa = []
-        with open(path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                obj = json.loads(line)
-                if obj.get("type") == "MCQ":
-                    mcq_qa.append({
-                        "question": obj["question"],
-                        "options": obj["options"],
-                        "correct_option": obj["answer"]
-                    })
-        return mcq_qa
+        base_model = AutoModelForCausalLM.from_pretrained(
+            model_path,
+            quantization_config=bnb_config,
+            device_map={"": torch.cuda.current_device()} if self.device == "cuda" else "auto",
+            trust_remote_code=True,
+        )
 
-    def generate_general_answers(self, pipeline, dataset):
-        predictions = []
-        for item in dataset:
-            prompt = (
-                f"### INSTRUCTION:\n"
-                f"You are a helpful medical assistant trained on liver diseases.\n"
-                f"Study and respond accurately to the question below.\n"
-                f"### INPUT:\n"
-                f"Question: {item['question']}\n"
-                f"### OUTPUT:\n"
-                f"Answer:"
-            )
-            output = pipeline(prompt, max_new_tokens=self.MAX_NEW_TOKENS, pad_token_id=pipeline.tokenizer.eos_token_id)[0]['generated_text']
-            answer = output.split("Answer:")[-1].strip()
-            predictions.append(answer)
-        return predictions
+        tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=False)
+        tokenizer.pad_token = tokenizer.eos_token
 
-    def generate_mcq_answers(self, pipeline, dataset):
-        predictions, references = [], []
-        for item in dataset:
+        model = MultiTaskLiverModel(base_model)
+        target_dtype = next(model.base_model.parameters()).dtype
+        model.classifier = model.classifier.to(dtype=target_dtype, device=self.device)
+        model.to(self.device)
+        model.eval()
+
+        return model, tokenizer
+
+    def load_dataset(self, dataset_path):
+        print(f"Loading dataset from: {dataset_path}")
+        with open(dataset_path, "r", encoding="utf-8") as f:
+            raw_data = [json.loads(line) for line in f if line.strip()]
+
+        dataset = []
+        for qa in raw_data:
+            if qa.get("type", "").upper() != "MCQ":
+                continue
+
+            question = qa.get("question", "").strip()
+            options = qa.get("options", {})
+            answer = qa.get("answer", "").strip().lower()
+
+            valid_options = sorted([k.lower() for k in options if k.lower() in ["a", "b", "c", "d", "e"]])
+            if answer not in valid_options:
+                continue
+
+            label_index = valid_options.index(answer)
+            lower_to_actual = {k.lower(): k for k in options if k.lower() in valid_options}
+            options_str = "\n".join([f"{k}. {options[lower_to_actual[k]]}" for k in valid_options])
+
             prompt = (
                 f"### INSTRUCTION:\n"
                 f"You are a helpful medical assistant trained on liver diseases.\n"
                 f"Study the following multiple-choice question and select the correct option.\n"
                 f"### INPUT:\n"
-                f"Question: {item['question']}\n"
-                f"OPTIONS:\n"
+                f"QUESTION: {question}\n"
+                f"OPTIONS:\n{options_str}\n"
+                f"Answer:"
             )
-            for key, value in item['options'].items():
-                prompt += f"{key}. {value}\n"
-            prompt += "Answer (a/b/c/d/e):"
-            output = pipeline(prompt, max_new_tokens=10, pad_token_id=pipeline.tokenizer.eos_token_id)[0]['generated_text']
-            pred = output.split("Answer")[-1].strip().lower()
-            # Normalize to option letter
-            for opt in ['a', 'b', 'c', 'd', 'e']:
-                if opt in pred:
-                    predictions.append(opt)
-                    break
-            else:
-                predictions.append("unknown")
-            references.append(item["correct_option"].lower())
-        return predictions, references
 
-    def evaluate_general(self, predictions, references):
-        bleu = evaluate.load("bleu")
-        rouge = evaluate.load("rouge")
-        #tokenized_preds = [word_tokenize(p.lower()) for p in predictions]
-        #tokenized_refs = [[[word.lower() for word in word_tokenize(r)]] for r in references]
+            dataset.append({
+                "prompt": prompt,
+                "label_index": label_index
+            })
 
-        bleu_score = bleu.compute(predictions=predictions, references=references)
-        rouge_score = rouge.compute(predictions=predictions, references=references)
-        
-        acc = sum(p.strip().lower() == r.strip().lower() for p, r in zip(predictions, references)) / len(predictions)
-
-        return {
-            "BLEU": bleu_score,
-            "ROUGE": rouge_score,
-            "Exact Match Accuracy": acc
-        }
-
-    def evaluate_mcq(self, predictions, references):
-        correct = sum(p == r for p, r in zip(predictions, references))
-        total = len(references)
-        accuracy = correct / total
-        return {"MCQ Accuracy": accuracy}
+        return dataset
 
     def main(self):
-        print("Loading model and tokenizer...")
-        #tokenizer, model, pipeline = self.load_model_and_tokenizer(BASE_MODEL_PATH, QA_FINETUNED_MOA_MODEL_PATH)
-        tokenizer, model, pipeline = self.load_model_and_tokenizer(BASE_MODEL_PATH, QA_FINETUNED_MCQ_MODEL_PATH)
+        model, tokenizer = self.load_model_and_tokenizer(QA_FINETUNED_MCQ_MODEL_PATH + "_merged")
+        data = self.load_dataset(QA_FINETUNED_MCQ_VALIDATION_DATASET)
 
-        """
-        print("Evaluating General QA...")
-        general_qa = self.load_general_qa(QA_FINETUNED_MOA_VALIDATION_DATASET)
-        print("QA loaded from the dataset ", general_qa[0])
-        general_predictions = self.generate_general_answers(pipeline, general_qa)
-        print("Generated predictions from model: ",general_predictions[0])
-        general_references = [item['answer'] for item in general_qa]
-        print("Answer from the QA dataset: ",general_references[0])
-        general_scores = self.evaluate_general(general_predictions, general_references)
-        
-        # Save General QA Results
-        general_output = [
-        {
-            "question": item['question'],
-            "predicted_answer": pred,
-            "reference_answer": item['answer']
-        }
-        for item, pred in zip(general_qa, general_predictions)
-        ]
-        with open("general_qa_predictions.json", "w") as f:
-            json.dump(general_output, f, indent=2)
-        
-        for k, v in general_scores.items():
-            print(f"{k}: {v}")
-        """
+        total, correct = 0, 0
 
-        print("\nEvaluating MCQ QA...")
-        mcq_qa = self.load_mcq_qa(QA_FINETUNED_MCQ_VALIDATION_DATASET)
-        print('Evaluation the first question:')
-        print("MCQ data from dataset: ",mcq_qa[0])
-        mcq_predictions, mcq_references = self.generate_mcq_answers(pipeline, mcq_qa)
-        print("Predicted Option: ",mcq_predictions[0])
-        print("Actual Option: ",mcq_references[0])
-        print()
-        mcq_scores = self.evaluate_mcq(mcq_predictions, mcq_references)
-        for k, v in mcq_scores.items():
-            print(f"{k}: {v}")
-            
-        mcq_output = [
-            {
-               "question": item['question'],
-               "options": item.get('options', None),
-               "predicted_option": pred,
-               "reference_option": ref
-            }
-            for item, pred, ref in zip(mcq_qa, mcq_predictions, mcq_references)
-        ]
-        with open("mcq_qa_predictions.json", "w") as f:
-            json.dump(mcq_output, f, indent=2)
-    
-        for k, v in mcq_scores.items():
-            print(f"{k}: {v}")
+        for i, item in enumerate(data, 1):
+            try:
+                prompt = item["prompt"]
+                label = item["label_index"]
 
+                inputs = tokenizer(
+                    prompt,
+                    return_tensors="pt",
+                    truncation=True,
+                    padding="max_length",
+                    max_length=256,
+                ).to(self.device)
+
+                with torch.no_grad():
+                    outputs = model(**inputs, task_type="mcq")
+                    logits = outputs["logits"]
+                    pred = torch.argmax(logits, dim=1).item()
+
+                print(f"[Q{i}] Predicted: {pred} | Actual: {label}")
+                if pred == label:
+                    correct += 1
+                total += 1
+
+            except Exception as e:
+                print(f"[Skip Q{i}] Error: {str(e)}")
+
+        print("\nEvaluation complete.")
+        print(f"Total: {total} | Correct: {correct}")
+        print(f"MCQ Accuracy: {correct / total:.4f}" if total else "MCQ Accuracy: 0.0000")

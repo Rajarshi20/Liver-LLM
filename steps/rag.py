@@ -1,40 +1,48 @@
 from sentence_transformers import SentenceTransformer
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
+from peft import PeftModel, PeftConfig
 import torch
 import fitz  # PyMuPDF
 import faiss
 import numpy as np
 import os
+from config import BASE_MODEL_PATH, QA_FINETUNED_MOA_MODEL_PATH
+from utils import TextCleaner
 
 class RetrievalAugmentedGeneration:
-    def __init__(self, model_path="./liver-llm"):
-        # Load embedding model
-        self.embedding_model = SentenceTransformer("deepseek-ai/deepseek-embedding")
+    def __init__(self):
+        self.embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
 
-        # Load LLama-based Liver LLM locally
-        self.llm_tokenizer = AutoTokenizer.from_pretrained(model_path)
-        self.llm_model = AutoModelForCausalLM.from_pretrained(model_path)
-        self.llm_model.eval()
-
-        # Set device and initialize pipeline
+        # Device setup
         self.device = 0 if torch.cuda.is_available() else -1
-        self.llm_pipeline = pipeline("text-generation", model=self.llm_model, tokenizer=self.llm_tokenizer, device=self.device)
+        device_str = "cuda" if self.device == 0 else "cpu"
 
-    # Extract and chunk text from PDF
-    def extract_text_from_pdf(self, pdf_path, chunk_size=500):
-        try:
-            doc = fitz.open(pdf_path)
-            text = ""
-            for page in doc:
-                text += page.get_text()
-            doc.close()
-        except Exception as e:
-            raise ValueError(f"Error reading PDF: {e}")
+        # Load tokenizer and base model
+        self.tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL_PATH)
+        base_model = AutoModelForCausalLM.from_pretrained(BASE_MODEL_PATH).to(device_str)
 
-        chunks = [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]
-        return chunks 
+        lora_path = QA_FINETUNED_MOA_MODEL_PATH
+        if lora_path:
+            self.llm_model = PeftModel.from_pretrained(base_model, lora_path).to(device_str)
+        else:
+            self.llm_model = base_model
 
-    # Embed and index chunks
+        self.llm_model.eval()
+        self.llm_pipeline = pipeline("text-generation", model=self.llm_model, tokenizer=self.tokenizer, device=self.device)
+
+    def extract_text_from_pdf(self, pdf_file, chunk_size=500):
+        if not os.path.isfile(pdf_file):
+            raise FileNotFoundError(f"PDF file not found: {pdf_file}")
+        else:
+            doc = fitz.open(pdf_file)
+            text = "".join([page.get_text() for page in doc])
+            
+            cleaner = TextCleaner()
+            text = cleaner.clean_text(text)
+            
+            chunks = [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]
+            return chunks
+
     def build_faiss_index(self, chunks):
         embeddings = self.embedding_model.encode(chunks)
         dim = embeddings.shape[1]
@@ -42,24 +50,66 @@ class RetrievalAugmentedGeneration:
         index.add(embeddings)
         return index, embeddings
 
-    # Retrieve top-k relevant chunks
     def retrieve_chunks(self, query, chunks, embeddings, index, k=5):
         query_vec = self.embedding_model.encode([query])
         _, indices = index.search(query_vec, k)
         return [chunks[i] for i in indices[0]]
 
-    # Generate answer or summary from retrieved context
     def generate_response(self, query, retrieved_chunks):
-        context = "\n".join(retrieved_chunks)[:4000]  # truncate to fit token limit
-        prompt = f"Use the following liver medical research context to answer or summarize:\n\nContext:\n{context}\n\nQuestion:\n{query}\n\nAnswer:"
-        response = self.llm_pipeline(prompt, max_new_tokens=300, do_sample=True, temperature=0.7)[0]['generated_text']
-        return response.replace(prompt, "").strip()
+        # 1. Join chunks and limit total context length
+        context = "\n".join(retrieved_chunks)[:1000]
 
-# Example usage:
-# rag = RetrievalAugmentedGeneration(model_path="./liver-llm")
-# chunks = rag.extract_text_from_pdf("example_liver_paper.pdf")
-# index, embeddings = rag.build_faiss_index(chunks)
-# query = "Summarize the findings related to liver fibrosis."
-# retrieved = rag.retrieve_chunks(query, chunks, embeddings, index)
-# response = rag.generate_response(query, retrieved)
-# print(response)
+        # 2. Construct prompt
+        prompt = (
+            f"### INSTRUCTION:\n"
+            f"You are a helpful medical assistant trained on liver diseases.\n"
+            f"Use the following liver medical research CONTEXT to answer the QUESTION.\n\n"
+            f"### CONTEXT:\n"
+            f"{context}\n\n"
+            f"### QUESTION:\n{query}\n\n"
+            f"Answer:"
+        )
+
+        # 3. Generate with stable parameters (no sampling, shorter output, eos_token_id)
+        response = self.llm_pipeline(
+            prompt,
+            max_new_tokens=128,
+            do_sample=True,
+            temperature=0.5,
+            eos_token_id=self.tokenizer.eos_token_id,
+        )[0]['generated_text']
+
+        print('[LLM RESPONSE]: ', response)
+        print()
+
+        # 4. Clean output
+        answer_raw = response.replace(prompt, "").strip()
+        # print('RAW RESP: ', answer_raw)
+
+        # 5. Stop at double newlines or use deduplication
+        answer_trimmed = answer_raw.split("\n\n")[0].strip()
+        answer_clean = self.remove_repeated_sentences(answer_trimmed)
+
+        # print('CLEANED: ', answer_clean)
+        return answer_clean
+    
+    def save_faiss_index(self, index, path="index.faiss"):
+        faiss.write_index(index, path)
+
+    def load_faiss_index(self, path="index.faiss"):
+        return faiss.read_index(path)
+
+    def remove_repeated_sentences(self, text):
+        import re
+        # Split using regex for robustness
+        sentences = re.split(r'(?<=[.!?]) +', text)
+        seen = set()
+        result = []
+
+        for s in sentences:
+            s_clean = s.strip()
+            if s_clean and s_clean not in seen:
+                result.append(s_clean)
+                seen.add(s_clean)
+
+        return " ".join(result)
